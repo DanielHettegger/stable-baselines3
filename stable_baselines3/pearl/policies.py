@@ -24,7 +24,7 @@ LOG_STD_MIN = -20
 
 class Actor(BasePolicy):
     """
-    Actor network (policy) for SAC.
+    Actor network (policy) for PEARL.
 
     :param observation_space: Obervation space
     :param action_space: Action space
@@ -193,9 +193,9 @@ class Actor(BasePolicy):
         return self.forward(observation, deterministic)
 
 
-class SACPolicy(BasePolicy):
+class PEARLPolicy(BasePolicy):
     """
-    Policy class (with both actor and critic) for SAC.
+    Policy class (with both actor and critic) for PEARL.
 
     :param observation_space: Observation space
     :param action_space: Action space
@@ -245,7 +245,7 @@ class SACPolicy(BasePolicy):
         n_critics: int = 2,
         share_features_extractor: bool = True,
     ):
-        super(SACPolicy, self).__init__(
+        super(PEARLPolicy, self).__init__(
             observation_space,
             action_space,
             features_extractor_class,
@@ -362,12 +362,12 @@ class SACPolicy(BasePolicy):
         return self.actor(observation, deterministic)
 
 
-MlpPolicy = SACPolicy
+MlpPolicy = PEARLPolicy
 
 
-class CnnPolicy(SACPolicy):
+class CnnPolicy(PEARLPolicy):
     """
-    Policy class (with both actor and critic) for SAC.
+    Policy class (with both actor and critic) for PEARL.
 
     :param observation_space: Observation space
     :param action_space: Action space
@@ -436,9 +436,9 @@ class CnnPolicy(SACPolicy):
         )
 
 
-class MultiInputPolicy(SACPolicy):
+class MultiInputPolicy(PEARLPolicy):
     """
-    Policy class (with both actor and critic) for SAC.
+    Policy class (with both actor and critic) for PEARL.
 
     :param observation_space: Observation space
     :param action_space: Action space
