@@ -20,9 +20,9 @@ from stable_baselines3.common.vec_env import VecEnv
 from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 
 
-class OffPolicyAlgorithm(BaseAlgorithm):
+class MetaOffPolicyAlgorithm(BaseAlgorithm):
     """
-    The base for Off-Policy algorithms (ex: SAC/TD3)
+    The base for Meta Off-Policy algorithms (ex: PEARL)
 
     :param policy: Policy object
     :param env: The environment to learn from
@@ -81,6 +81,9 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         learning_rate: Union[float, Schedule],
         buffer_size: int = 1000000,  # 1e6
         learning_starts: int = 100,
+        n_traintasks: int = 0,
+        n_evaltasks: int = 0,
+        n_epochtasks: int = 0,
         batch_size: int = 256,
         tau: float = 0.005,
         gamma: float = 0.99,
@@ -106,7 +109,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         supported_action_spaces: Optional[Tuple[gym.spaces.Space, ...]] = None,
     ):
 
-        super(OffPolicyAlgorithm, self).__init__(
+        super(MetaOffPolicyAlgorithm, self).__init__(
             policy=policy,
             env=env,
             policy_base=policy_base,
@@ -152,6 +155,19 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         # For gSDE only
         self.use_sde_at_warmup = use_sde_at_warmup
 
+        print('###############################################')
+        print('###############     CONFIG     ################')
+        print('######## n_traintasks: ',n_traintasks,'###########')
+        print('######## n_evaltasks: ',n_evaltasks,'###########')
+        print('######## n_epochtasks: ',n_epochtasks,'###########')
+        print('###############################################')
+        
+        self.n_traintasks = n_traintasks
+        self.n_evaltasks = n_evaltasks
+        self.n_epochtasks = n_epochtasks
+        self._n_env_steps_total = 0
+        self.initial_experience = False
+
     def _convert_train_freq(self) -> None:
         """
         Convert `train_freq` parameter (int or tuple)
@@ -178,46 +194,52 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
 
-        # Use DictReplayBuffer if needed
-        if self.replay_buffer_class is None:
-            if isinstance(self.observation_space, gym.spaces.Dict):
-                self.replay_buffer_class = DictReplayBuffer
-            else:
-                self.replay_buffer_class = ReplayBuffer
+        self.RBList_replay = [None] * self.n_traintasks
+        self.RBList_encoder = [None] * self.n_traintasks
+        self.RBList_eval = [None] * self.n_evaltasks
 
-        elif self.replay_buffer_class == HerReplayBuffer:
-            assert self.env is not None, "You must pass an environment when using `HerReplayBuffer`"
+        for i in range(self.n_traintasks):
+            self.RBList_replay[i] = ReplayBuffer(
+            self.buffer_size,
+            self.observation_space,
+            self.action_space,
+            self.device,
+            optimize_memory_usage=self.optimize_memory_usage,
+        )
+        
+        for i in range(self.n_traintasks):
+            self.RBList_encoder[i] = ReplayBuffer(
+            self.buffer_size,
+            self.observation_space,
+            self.action_space,
+            self.device,
+            optimize_memory_usage=self.optimize_memory_usage,
+        )
+        
+        for i in range(self.n_evaltasks):
+            self.RBList_eval[i] = ReplayBuffer(
+            self.buffer_size,
+            self.observation_space,
+            self.action_space,
+            self.device,
+            optimize_memory_usage=self.optimize_memory_usage,
+        )
 
-            # If using offline sampling, we need a classic replay buffer too
-            if self.replay_buffer_kwargs.get("online_sampling", True):
-                replay_buffer = None
-            else:
-                replay_buffer = DictReplayBuffer(
-                    self.buffer_size,
-                    self.observation_space,
-                    self.action_space,
-                    self.device,
-                    optimize_memory_usage=self.optimize_memory_usage,
-                )
+        base_length = 500
 
-            self.replay_buffer = HerReplayBuffer(
-                self.env,
-                self.buffer_size,
-                self.device,
-                replay_buffer=replay_buffer,
-                **self.replay_buffer_kwargs,
-            )
-
-        if self.replay_buffer is None:
-            self.replay_buffer = self.replay_buffer_class(
-                self.buffer_size,
-                self.observation_space,
-                self.action_space,
-                self.device,
-                optimize_memory_usage=self.optimize_memory_usage,
-                **self.replay_buffer_kwargs,
-            )
-
+        self.num_initial_steps = 10*base_length
+        self.num_train_steps_per_itr = 2000
+        self.num_steps_prior = 2*base_length
+        self.num_steps_posterior = 0
+        self.num_extra_rl_steps_posterior = 3*base_length
+        self.update_post_train = 1
+        self.num_iterations = 500
+        self.num_tasks_sample = 5
+        self.max_path_length = 500
+        self.train_tasks = 5
+        self.meta_batch = 16
+        self._n_train_steps_total = 0
+        
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
             self.observation_space,
             self.action_space,
@@ -236,8 +258,9 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         :param path: Path to the file where the replay buffer should be saved.
             if path is a str or pathlib.Path, the path is automatically created if necessary.
         """
-        assert self.replay_buffer is not None, "The replay buffer is not defined"
-        save_to_pkl(path, self.replay_buffer, self.verbose)
+        raise NotImplementedError
+        #assert self.replay_buffer is not None, "The replay buffer is not defined"
+        #save_to_pkl(path, self.replay_buffer, self.verbose)
 
     def load_replay_buffer(
         self,
@@ -253,6 +276,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             (and truncate it).
             If set to ``False``, we assume that we continue the same trajectory (same episode).
         """
+        raise NotImplementedError
+
         self.replay_buffer = load_from_pkl(path, self.verbose)
         assert isinstance(self.replay_buffer, ReplayBuffer), "The replay buffer must inherit from ReplayBuffer class"
 
@@ -321,6 +346,35 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             reset_num_timesteps,
             tb_log_name,
         )
+    
+    def reset_buffers(self):
+        # needed for curriculum learning
+        for i in range(self.n_traintasks):
+            self.RBList_replay[i] = ReplayBuffer(
+            self.buffer_size,
+            self.observation_space,
+            self.action_space,
+            self.device,
+            optimize_memory_usage=self.optimize_memory_usage,
+        )
+        
+        for i in range(self.n_traintasks):
+            self.RBList_encoder[i] = ReplayBuffer(
+            self.buffer_size,
+            self.observation_space,
+            self.action_space,
+            self.device,
+            optimize_memory_usage=self.optimize_memory_usage,
+        )
+        
+        for i in range(self.n_evaltasks):
+            self.RBList_eval[i] = ReplayBuffer(
+            self.buffer_size,
+            self.observation_space,
+            self.action_space,
+            self.device,
+            optimize_memory_usage=self.optimize_memory_usage,
+        )
 
     def learn(
         self,
@@ -333,44 +387,140 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         tb_log_name: str = "run",
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
-    ) -> "OffPolicyAlgorithm":
+    ) -> "MetaOffPolicyAlgorithm":
 
-        total_timesteps, callback = self._setup_learn(
-            total_timesteps,
-            eval_env,
-            callback,
-            eval_freq,
-            n_eval_episodes,
-            eval_log_path,
-            reset_num_timesteps,
-            tb_log_name,
-        )
-
+        #total_timesteps, self.callback = self._setup_learn(
+        #    total_timesteps, eval_env, callback, eval_freq, n_eval_episodes, eval_log_path, reset_num_timesteps, tb_log_name
+        #)
+        callback = self.callback
         callback.on_training_start(locals(), globals())
 
-        while self.num_timesteps < total_timesteps:
-            rollout = self.collect_rollouts(
-                self.env,
-                train_freq=self.train_freq,
-                action_noise=self.action_noise,
-                callback=callback,
-                learning_starts=self.learning_starts,
-                replay_buffer=self.replay_buffer,
-                log_interval=log_interval,
-            )
 
-            if rollout.continue_training is False:
-                break
 
-            if self.num_timesteps > 0 and self.num_timesteps > self.learning_starts:
-                # If no `gradient_steps` is specified,
-                # do as many gradients steps as steps performed during the rollout
-                gradient_steps = self.gradient_steps if self.gradient_steps > 0 else rollout.episode_timesteps
-                self.train(batch_size=self.batch_size, gradient_steps=gradient_steps)
+        '''
+        meta-training loop
+        '''
 
+        
+
+        for it_ in range(1):
+            if it_ == 0 and self.initial_experience == False:
+                self.actor.z_means = th.zeros(5)
+                self.actor.z_vars = th.ones(5)
+                self.actor.sample_z()
+                self.actor.context = None
+
+                print('collecting initial pool of data for train and eval')
+                # temp for evaluating
+                for idx in range(self.n_traintasks):
+                    self.task_idx = idx
+                    self.env.env_method("reset_task", self.task_idx)
+                    self.collect_data(self.num_initial_steps, 1, np.inf)
+                self.initial_experience = True
+            # Sample data from train tasks.
+            else:
+                print(self.RBList_replay[1].pos)
+            for i in range(self.num_tasks_sample):
+                idx = np.random.randint(self.n_traintasks)
+                self.task_idx = idx
+                self.env.env_method("reset_task", self.task_idx)
+                self.RBList_encoder[idx].reset()
+
+                # collect some trajectories with z ~ prior
+                if self.num_steps_prior > 0:
+                    self.collect_data(self.num_steps_prior, 1, np.inf)
+                # collect some trajectories with z ~ posterior
+                if self.num_steps_posterior > 0:
+                    self.collect_data(self.num_steps_posterior, 1, self.update_post_train)
+                # even if encoder is trained only on samples from the prior, the policy needs to learn to handle z ~ posterior
+                if self.num_extra_rl_steps_posterior > 0:
+                    self.collect_data(self.num_extra_rl_steps_posterior, 1, self.update_post_train, add_to_enc_buffer=False)
+
+            # Sample train tasks and compute gradient updates on parameters.
+            print('apply grads')
+            for train_step in range(self.num_train_steps_per_itr):
+                indices = np.random.choice(self.n_traintasks, self.meta_batch)
+                self._do_training(indices)
+                self._n_train_steps_total += 1
+
+                print('----- ', train_step ,' -----')
+                
+            self._dump_logs()
+            self.ent_coef_losses, self.ent_coefs = [], []
+            self.actor_losses, self.critic_losses = [], []
+            self.kl_losses = []
+            self.l_z_means, self.l_z_vars = [], []
+        
         callback.on_training_end()
 
         return self
+
+    def collect_data(self, num_samples, resample_z_rate, update_posterior_rate, add_to_enc_buffer=True):
+        '''
+        get trajectories from current env in batch mode with given policy
+        collect complete trajectories until the number of collected transitions >= num_samples
+        :param agent: policy to rollout
+        :param num_samples: total number of transitions to sample
+        :param resample_z_rate: how often to resample latent context z (in units of trajectories)
+        :param update_posterior_rate: how often to update q(z | c) from which z is sampled (in units of trajectories)
+        :param add_to_enc_buffer: whether to add collected data to encoder replay buffer
+        '''
+        # start from the prior
+        self.actor.clear_z()
+
+        num_transitions = 0
+        while num_transitions < num_samples:
+            if add_to_enc_buffer:
+                n_samples = self.obtain_samples(max_samples=num_samples - num_transitions,
+                                                                max_trajs=update_posterior_rate,
+                                                                accum_context=False,
+                                                                resample=resample_z_rate,
+                                                                replaybuffers=[self.RBList_replay[self.task_idx],self.RBList_encoder[self.task_idx]])
+            else:
+                n_samples = self.obtain_samples(max_samples=num_samples - num_transitions,
+                                                                max_trajs=update_posterior_rate,
+                                                                accum_context=False,
+                                                                resample=resample_z_rate,
+                                                                replaybuffers=[self.RBList_replay[self.task_idx]])
+            
+            if update_posterior_rate != np.inf:
+                context = self.sample_context(self.task_idx)
+                self.actor.infer_posterior(context)
+
+            num_transitions += n_samples
+
+        self._n_env_steps_total += num_transitions
+       
+
+    def obtain_samples(self, deterministic=False, max_samples=np.inf, max_trajs=np.inf, accum_context=True, resample=1, replaybuffers = []):
+        """
+        Obtains samples in the environment until either we reach either max_samples transitions or
+        num_traj trajectories.
+        The resample argument specifies how often (in trajectories) the agent will resample it's context.
+        """
+        assert max_samples < np.inf or max_trajs < np.inf, "either max_samples or max_trajs must be finite"
+        
+        n_steps_total = 0
+        n_trajs = 0
+        while n_steps_total < max_samples and n_trajs < max_trajs:
+            # save the latent context that generated this trajectory
+            rollout = self.collect_rollouts(
+                    self.env,
+                    n_episodes=1,
+                    n_steps=self.max_path_length,
+                    action_noise=self.action_noise,
+                    callback=self.callback,
+                    learning_starts=self.learning_starts,
+                    replay_buffer=replaybuffers,
+                    log_interval=None,
+                    accum_context=accum_context
+                )
+            n_steps_total += self.max_path_length
+            n_trajs += 1
+            # don't we also want the option to resample z ever transition?
+            if n_trajs % resample == 0:
+                self.actor.sample_z()
+        return n_steps_total
 
     def train(self, gradient_steps: int, batch_size: int) -> None:
         """
@@ -540,7 +690,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         num_collected_steps, num_collected_episodes = 0, 0
 
         assert isinstance(env, VecEnv), "You must pass a VecEnv"
-        assert env.num_envs == 1, "OffPolicyAlgorithm only support single environment"
+        assert env.num_envs == 1, "MetaOffPolicyAlgorithm only support single environment"
         assert train_freq.frequency > 0, "Should at least collect one step or episode."
 
         if self.use_sde:
