@@ -508,7 +508,7 @@ class PEARLPolicy(BasePolicy):
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Space,
         lr_schedule: Schedule,
-        latent_size: int = 5,
+        latent_dim: int = 5,
         net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
         activation_fn: Type[nn.Module] = nn.ReLU,
         use_sde: bool = False,
@@ -553,6 +553,7 @@ class PEARLPolicy(BasePolicy):
         }
         self.actor_kwargs = self.net_args.copy()
         sde_kwargs = {
+            "latent_dim": latent_dim,
             "use_sde": use_sde,
             "log_std_init": log_std_init,
             "sde_net_arch": sde_net_arch,
