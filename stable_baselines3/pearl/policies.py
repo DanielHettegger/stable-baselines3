@@ -166,7 +166,7 @@ class Actor(BasePolicy):
         self.latent_dim = latent_dim
         self.observation_space = observation_space
         action_dim = get_action_dim(self.action_space)
-        latent_pi_net = create_mlp(features_dim, -1, net_arch, activation_fn)
+        latent_pi_net = create_mlp(features_dim+latent_dim, -1, net_arch, activation_fn)
 
 
         bound = 1. / np.sqrt(300)

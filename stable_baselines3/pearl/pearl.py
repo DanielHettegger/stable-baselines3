@@ -83,6 +83,7 @@ class PEARL(MetaOffPolicyAlgorithm):
         n_traintasks: int = 0,
         n_evaltasks: int = 0,
         n_epochtasks: int = 0,
+        latent_dim = 5,
         batch_size: int = 256,
         tau: float = 0.005,
         gamma: float = 0.99,
@@ -117,6 +118,7 @@ class PEARL(MetaOffPolicyAlgorithm):
             n_traintasks,
             n_evaltasks,
             n_epochtasks,
+            latent_dim,
             batch_size,
             tau,
             gamma,
@@ -389,18 +391,18 @@ class PEARL(MetaOffPolicyAlgorithm):
 
         self._n_updates += 1
 
-        logger.record(key = "train/n_updates", value=self._n_updates, exclude="tensorboard")
+        self.logger.record(key = "train/n_updates", value=self._n_updates, exclude="tensorboard")
         #logger.record(key = "train/ent_coef", value=self.ent_coefs)
-        logger.record(key = "train/actor_loss", value=actor_loss.item())
-        logger.record(key = "train/critic_loss", value = critic_loss.item())
-        logger.record(key = "train/KL_loss", value= kl_loss.detach().numpy().item())
-        logger.record(key = "train/avg. z", value = np.mean(local_means))
-        logger.record(key = "train/avg. z var", value = np.mean(local_vars))
+        self.logger.record(key = "train/actor_loss", value=actor_loss.item())
+        self.logger.record(key = "train/critic_loss", value = critic_loss.item())
+        self.logger.record(key = "train/KL_loss", value= kl_loss.detach().numpy().item())
+        self.logger.record(key = "train/avg. z", value = np.mean(local_means))
+        self.logger.record(key = "train/avg. z var", value = np.mean(local_vars))
         if len(self.ent_coef_losses) > 0:
-            logger.record("train/ent_coef_loss", self.ent_coef_losses)
+            self.logger.record("train/ent_coef_loss", self.ent_coef_losses)
         
         #self._dump_logs()
-        logger.dump(step=self._n_updates)
+        self.logger.dump(step=self._n_updates)
 
 
         print('KL_DIV:', kl_div)

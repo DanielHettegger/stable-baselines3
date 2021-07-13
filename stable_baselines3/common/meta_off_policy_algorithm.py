@@ -84,6 +84,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         n_traintasks: int = 0,
         n_evaltasks: int = 0,
         n_epochtasks: int = 0,
+        latent_dim: int = 5,
         batch_size: int = 256,
         tau: float = 0.005,
         gamma: float = 0.99,
@@ -239,6 +240,20 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         self.train_tasks = 5
         self.meta_batch = 16
         self._n_train_steps_total = 0
+
+        from stable_baselines3.common.preprocessing import get_action_dim
+        self.act_dim = get_action_dim(self.action_space)
+
+        self.obs_dim = self.observation_space.shape[0]
+
+        self.JUST_EVAL = ReplayBuffer(
+                    self.buffer_size,
+                    self.observation_space,
+                    self.action_space,
+                    self.device,
+                    optimize_memory_usage=self.optimize_memory_usage,
+                )
+
         
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
             self.observation_space,
@@ -392,7 +407,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         #total_timesteps, self.callback = self._setup_learn(
         #    total_timesteps, eval_env, callback, eval_freq, n_eval_episodes, eval_log_path, reset_num_timesteps, tb_log_name
         #)
-        callback = self.callback
+        self.callback = callback
         callback.on_training_start(locals(), globals())
 
 
@@ -661,23 +676,23 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         self,
         env: VecEnv,
         callback: BaseCallback,
-        train_freq: TrainFreq,
-        replay_buffer: ReplayBuffer,
+        n_episodes: int = 1,
+        n_steps: int = -1,
         action_noise: Optional[ActionNoise] = None,
         learning_starts: int = 0,
+        replay_buffer: Optional[List[ReplayBuffer]] = None,
         log_interval: Optional[int] = None,
+        accum_context: bool = False,
     ) -> RolloutReturn:
         """
-        Collect experiences and store them into a ``ReplayBuffer``.
-
+        Collect experiences and store them into a ReplayBuffer.
         :param env: The training environment
         :param callback: Callback that will be called at each step
             (and at the beginning and end of the rollout)
-        :param train_freq: How much experience to collect
-            by doing rollouts of current policy.
-            Either ``TrainFreq(<n>, TrainFrequencyUnit.STEP)``
-            or ``TrainFreq(<n>, TrainFrequencyUnit.EPISODE)``
-            with ``<n>`` being an integer greater than 0.
+        :param n_episodes: Number of episodes to use to collect rollout data
+            You can also specify a ``n_steps`` instead
+        :param n_steps: Number of steps to use to collect rollout data
+            You can also specify a ``n_episodes`` instead.
         :param action_noise: Action noise that will be used for exploration
             Required for deterministic policy (e.g. TD3). This can also be used
             in addition to the stochastic policy for SAC.
@@ -687,53 +702,72 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         :return:
         """
         episode_rewards, total_timesteps = [], []
-        num_collected_steps, num_collected_episodes = 0, 0
+        total_steps, total_episodes = 0, 0
 
         assert isinstance(env, VecEnv), "You must pass a VecEnv"
-        assert env.num_envs == 1, "MetaOffPolicyAlgorithm only support single environment"
-        assert train_freq.frequency > 0, "Should at least collect one step or episode."
-
+        assert env.num_envs == 1, "OffPolicyAlgorithm only support single environment"
+        
         if self.use_sde:
             self.actor.reset_noise()
-
-        callback.on_rollout_start()
+        try:
+            callback.on_rollout_start()
+        except:
+            pass
         continue_training = True
-
-        while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
+        o = env.reset()
+        next_o = None
+        while total_steps < n_steps or total_episodes < n_episodes:
             done = False
             episode_reward, episode_timesteps = 0.0, 0
 
             while not done:
 
-                if self.use_sde and self.sde_sample_freq > 0 and num_collected_steps % self.sde_sample_freq == 0:
+                if self.use_sde and self.sde_sample_freq > 0 and total_steps % self.sde_sample_freq == 0:
                     # Sample a new noise matrix
                     self.actor.reset_noise()
 
                 # Select action randomly or according to policy
-                action, buffer_action = self._sample_action(learning_starts, action_noise)
+                a, agent_info = self.actor.get_action(th.Tensor(o).reshape(-1,1,1))
 
+                #log z:
+                z_dict = {}
+                #for i,z_i in enumerate(self.actor.z.detach().numpy()[0]): TODO figure out logging
+                #    logger.record(key = "info/current_z_"+str(i), value=z_i)
+#z_dict["z_"+str(i)] = z_i
+
+                
                 # Rescale and perform action
-                new_obs, reward, done, infos = env.step(action)
+                next_o, reward, done, infos = env.step([a])
+                if accum_context:
+                    self.actor.update_context([o, a, reward, next_o, done, infos])
 
                 self.num_timesteps += 1
                 episode_timesteps += 1
-                num_collected_steps += 1
+                total_steps += 1
 
                 # Give access to local variables
-                callback.update_locals(locals())
-                # Only stop training if return value is False, not when it is None.
-                if callback.on_step() is False:
-                    return RolloutReturn(0.0, num_collected_steps, num_collected_episodes, continue_training=False)
+                try:
+                    callback.update_locals(locals())
+                    # Only stop training if return value is False, not when it is None.
+                    if callback.on_step() is False:
+                        return RolloutReturn(0.0, total_steps, total_episodes, continue_training=False)
+                except:
+                    pass
 
                 episode_reward += reward
 
                 # Retrieve reward and episode length if using Monitor wrapper
                 self._update_info_buffer(infos, done)
 
-                # Store data in replay buffer (normalized action and unnormalized observation)
-                self._store_transition(replay_buffer, buffer_action, new_obs, reward, done, infos)
+                # Store data in replay buffer
+                if replay_buffer is not None:           
+                    for RB in replay_buffer:
+                        RB.add(obs = o, next_obs = next_o, action = a, reward = reward, done = done, infos=infos)
 
-                self._update_current_progress_remaining(self.num_timesteps, self._total_timesteps)
+                o = next_o                # Save the unnormalized observation
+                
+
+                self._update_current_progress_remaining(self.num_timesteps, self._total_timesteps+1)
 
                 # For DQN, check if the target network should be updated
                 # and update the exploration schedule
@@ -741,11 +775,15 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
                 # see https://github.com/hill-a/stable-baselines/issues/900
                 self._on_step()
 
-                if not should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
+                if 0 < n_steps <= total_steps:
+                    total_episodes += 1
+                    self._episode_num += 1
+                    episode_rewards.append(episode_reward)
+                    total_timesteps.append(episode_timesteps)
                     break
 
             if done:
-                num_collected_episodes += 1
+                total_episodes += 1
                 self._episode_num += 1
                 episode_rewards.append(episode_reward)
                 total_timesteps.append(episode_timesteps)
@@ -754,11 +792,13 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
                     action_noise.reset()
 
                 # Log training infos
-                if log_interval is not None and self._episode_num % log_interval == 0:
-                    self._dump_logs()
-
-        mean_reward = np.mean(episode_rewards) if num_collected_episodes > 0 else 0.0
-
-        callback.on_rollout_end()
-
-        return RolloutReturn(mean_reward, num_collected_steps, num_collected_episodes, continue_training)
+                #if log_interval is not None and self._episode_num % log_interval == 0:
+                #    self._dump_logs()
+                self._dump_logs()
+                
+        mean_reward = np.mean(episode_rewards) if total_episodes > 0 else 0.0
+        try:
+            callback.on_rollout_end()
+        except:
+            pass
+        return RolloutReturn(mean_reward, total_steps, total_episodes, continue_training)
