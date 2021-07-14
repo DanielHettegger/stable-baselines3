@@ -150,7 +150,7 @@ class Actor(BasePolicy):
             squash_output=True,
         )
 
-        # Save arguments to re-create object at loading
+         # Save arguments to re-create object at loading
         self.use_sde = use_sde
         self.sde_features_extractor = None
         self.sde_net_arch = sde_net_arch
@@ -162,12 +162,11 @@ class Actor(BasePolicy):
         self.use_expln = use_expln
         self.full_std = full_std
         self.clip_mean = clip_mean
-
+        
         self.latent_dim = latent_dim
         self.observation_space = observation_space
         action_dim = get_action_dim(self.action_space)
         latent_pi_net = create_mlp(features_dim+latent_dim, -1, net_arch, activation_fn)
-
 
         bound = 1. / np.sqrt(300)
 
@@ -177,7 +176,7 @@ class Actor(BasePolicy):
 
         self.latent_pi = nn.Sequential(*latent_pi_net)
         last_layer_dim = net_arch[-1] if len(net_arch) > 0 else features_dim
-
+        
         # create context encoder network
         reward_dim = 1
         #context_encoder_input_dim = 2*features_dim + action_dim + reward_dim
@@ -197,6 +196,7 @@ class Actor(BasePolicy):
 
 
         self.latent_dim = latent_dim
+        
 
         if self.use_sde:
             latent_sde_dim = last_layer_dim
@@ -224,7 +224,7 @@ class Actor(BasePolicy):
             self.log_std = nn.Linear(last_layer_dim, action_dim)
             self.log_std.weight.data.uniform_(-0.001, 0.001)
             self.log_std.bias.data.uniform_(-0.001, 0.001)
-        
+
         self.z_means = th.zeros(latent_dim)
         self.z_vars = th.ones(latent_dim)
         #self.z = th.zeros(latent_dim)
@@ -242,7 +242,7 @@ class Actor(BasePolicy):
             self.last_fc_log_std = nn.Linear(last_layer_dim, action_dim)
             self.last_fc_log_std.weight.data.uniform_(-init_w, init_w)
             self.last_fc_log_std.bias.data.uniform_(-init_w, init_w)
-
+        
     def get_action(self, obs, deterministic=False):
         ''' sample action from the policy, conditioned on the task embedding '''
         z = self.z
@@ -363,7 +363,6 @@ class Actor(BasePolicy):
         It corresponds to ``th.exp(log_std)`` in the normal case,
         but is slightly different when using ``expln`` function
         (cf StateDependentNoiseDistribution doc).
-
         :return:
         """
         msg = "get_std() is only available when using gSDE"
@@ -373,7 +372,6 @@ class Actor(BasePolicy):
     def reset_noise(self, batch_size: int = 1) -> None:
         """
         Sample new weights for the exploration matrix, when using gSDE.
-
         :param batch_size:
         """
         msg = "reset_noise() is only available when using gSDE"
@@ -391,15 +389,15 @@ class Actor(BasePolicy):
 
         task_z = self.z
 
-        t, b, _ = obs.size()
-        obs = obs.view(t * b, -1)
-        task_z = [z.repeat(b, 1) for z in task_z]
-        task_z = th.cat(task_z, dim=0)
-        if b == 1:
-            task_z = task_z.reshape(1,-1)
-            obs = obs.reshape(1,-1)
+        #t, b = obs.size()
+        #obs = obs.view(t * b, -1)
+        #task_z = [z.repeat(b, 1) for z in task_z]
+        #task_z = th.cat(task_z, dim=0)
+        #if b == 1:
+        task_z = task_z.reshape(1,-1)
+        obs = obs.reshape(1,-1)
         # run policy, get log probs and new actions
-        features = th.cat([obs, task_z.detach()], dim=1)
+        features = th.cat([obs, task_z.detach()], dim=1).float()
         
         latent_pi = self.latent_pi(features)
         mean_actions = self.mu(latent_pi)
@@ -673,9 +671,10 @@ class PEARLPolicy(BasePolicy):
 
     def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
         #this is the predict fkt for 'evaluate'
-        action = self.actor(observation, self.actor.z, deterministic=deterministic, other_shape = True)
+        action = self.actor(observation, self.actor.z, deterministic=deterministic)#, other_shape = True)
                 
-        return action#.reshape(1,self.action_space.shape[0])
+        return action[0]#.reshape(1,self.action_space.shape[0])
+
 
 
 MlpPolicy = PEARLPolicy

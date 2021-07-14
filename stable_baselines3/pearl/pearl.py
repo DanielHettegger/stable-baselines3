@@ -150,6 +150,10 @@ class PEARL(MetaOffPolicyAlgorithm):
 
         self.indices = None
         self.context = None
+
+        self.n_traintasks = n_traintasks
+        self.n_evaltasks = n_evaltasks
+        self.n_epochtasks = n_epochtasks
         
         self.ent_coef_losses, self.ent_coefs = [], []
         self.actor_losses, self.critic_losses = [], []
