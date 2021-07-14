@@ -404,9 +404,9 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         reset_num_timesteps: bool = True,
     ) -> "MetaOffPolicyAlgorithm":
 
-        #total_timesteps, self.callback = self._setup_learn(
-        #    total_timesteps, eval_env, callback, eval_freq, n_eval_episodes, eval_log_path, reset_num_timesteps, tb_log_name
-        #)
+        total_timesteps, self.callback = self._setup_learn(
+            total_timesteps, eval_env, callback, eval_freq, n_eval_episodes, eval_log_path, reset_num_timesteps, tb_log_name
+        )
         self.callback = callback
         callback.on_training_start(locals(), globals())
 

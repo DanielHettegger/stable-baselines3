@@ -399,7 +399,7 @@ class PEARL(MetaOffPolicyAlgorithm):
         self.logger.record(key = "train/avg. z", value = np.mean(local_means))
         self.logger.record(key = "train/avg. z var", value = np.mean(local_vars))
         if len(self.ent_coef_losses) > 0:
-            self.logger.record("train/ent_coef_loss", self.ent_coef_losses)
+            self.logger.record("train/ent_coef_loss", self.ent_coef_losses[-1])
         
         #self._dump_logs()
         self.logger.dump(step=self._n_updates)
@@ -436,7 +436,7 @@ class PEARL(MetaOffPolicyAlgorithm):
         )
 
     def _excluded_save_params(self) -> List[str]:
-        return super(PEARL, self)._excluded_save_params() + ["actor", "critic", "critic_target"]
+        return super(PEARL, self)._excluded_save_params() + ["actor", "critic", "critic_target", "logger", "callback"]
 
     def _get_torch_save_params(self) -> Tuple[List[str], List[str]]:
         state_dicts = ["policy", "actor.optimizer", "critic.optimizer"]
