@@ -162,6 +162,7 @@ class Actor(BasePolicy):
         self.use_expln = use_expln
         self.full_std = full_std
         self.clip_mean = clip_mean
+        self.use_latent = 1
         
         self.latent_dim = latent_dim
         self.observation_space = observation_space
@@ -282,7 +283,8 @@ class Actor(BasePolicy):
         posteriors = [th.distributions.Normal(m, th.sqrt(s)) for m, s in zip(th.unbind(self.z_means), th.unbind(self.z_vars))]
         z = [d.rsample() for d in posteriors]
         self.z = th.stack(z)
-#        self.z = th.zeros_like(self.z)
+        if self.use_latent == 0:
+            self.z = th.zeros_like(self.z)
         
     def detach_z(self):
         ''' disable backprop through z '''
@@ -388,14 +390,16 @@ class Actor(BasePolicy):
 
 
         task_z = self.z
-
-        #t, b = obs.size()
-        #obs = obs.view(t * b, -1)
-        #task_z = [z.repeat(b, 1) for z in task_z]
-        #task_z = th.cat(task_z, dim=0)
-        #if b == 1:
-        task_z = task_z.reshape(1,-1)
-        obs = obs.reshape(1,-1)
+        t, b, s = obs.size()
+        if s == 6:
+            t, b, s = obs.size()
+            obs = obs.view(t * b, -1)
+            task_z = [z.repeat(b, 1) for z in task_z]
+            task_z = th.cat(task_z, dim=0)
+        else: 
+            task_z = task_z.reshape(1,-1)
+            obs = obs.reshape(1,-1)
+        
         # run policy, get log probs and new actions
         features = th.cat([obs, task_z.detach()], dim=1).float()
         
@@ -506,7 +510,7 @@ class PEARLPolicy(BasePolicy):
         observation_space: gym.spaces.Space,
         action_space: gym.spaces.Space,
         lr_schedule: Schedule,
-        latent_dim: int = 5,
+        latent_dim: int,
         net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
         activation_fn: Type[nn.Module] = nn.ReLU,
         use_sde: bool = False,

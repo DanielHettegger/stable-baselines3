@@ -140,6 +140,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
             replay_buffer_kwargs = {}
         self.replay_buffer_kwargs = replay_buffer_kwargs
         self._episode_storage = None
+        self.latent_dim = latent_dim
 
         # Remove terminations (dones) that are due to time limit
         # see https://github.com/hill-a/stable-baselines/issues/863
@@ -162,7 +163,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         print('######## n_evaltasks: ',n_evaltasks,'###########')
         print('######## n_epochtasks: ',n_epochtasks,'###########')
         print('###############################################')
-        
+
         self.n_traintasks = n_traintasks
         self.n_evaltasks = n_evaltasks
         self.n_epochtasks = n_epochtasks
@@ -201,30 +202,30 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
 
         for i in range(self.n_traintasks):
             self.RBList_replay[i] = ReplayBuffer(
-            self.buffer_size,
-            self.observation_space,
-            self.action_space,
-            self.device,
-            optimize_memory_usage=self.optimize_memory_usage,
-        )
-        
+                self.buffer_size,
+                self.observation_space,
+                self.action_space,
+                self.device,
+                optimize_memory_usage=self.optimize_memory_usage,
+            )
+
         for i in range(self.n_traintasks):
             self.RBList_encoder[i] = ReplayBuffer(
-            self.buffer_size,
-            self.observation_space,
-            self.action_space,
-            self.device,
-            optimize_memory_usage=self.optimize_memory_usage,
-        )
-        
+                self.buffer_size,
+                self.observation_space,
+                self.action_space,
+                self.device,
+                optimize_memory_usage=self.optimize_memory_usage,
+            )
+
         for i in range(self.n_evaltasks):
             self.RBList_eval[i] = ReplayBuffer(
-            self.buffer_size,
-            self.observation_space,
-            self.action_space,
-            self.device,
-            optimize_memory_usage=self.optimize_memory_usage,
-        )
+                self.buffer_size,
+                self.observation_space,
+                self.action_space,
+                self.device,
+                optimize_memory_usage=self.optimize_memory_usage,
+            )
 
         base_length = 500
 
@@ -247,18 +248,19 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         self.obs_dim = self.observation_space.shape[0]
 
         self.JUST_EVAL = ReplayBuffer(
-                    self.buffer_size,
-                    self.observation_space,
-                    self.action_space,
-                    self.device,
-                    optimize_memory_usage=self.optimize_memory_usage,
-                )
+            self.buffer_size,
+            self.observation_space,
+            self.action_space,
+            self.device,
+            optimize_memory_usage=self.optimize_memory_usage,
+        )
 
-        
+
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
             self.observation_space,
             self.action_space,
             self.lr_schedule,
+            self.latent_dim,
             **self.policy_kwargs,  # pytype:disable=not-instantiable
         )
         self.policy = self.policy.to(self.device)
@@ -361,35 +363,35 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
             reset_num_timesteps,
             tb_log_name,
         )
-    
+
     def reset_buffers(self):
         # needed for curriculum learning
         for i in range(self.n_traintasks):
             self.RBList_replay[i] = ReplayBuffer(
-            self.buffer_size,
-            self.observation_space,
-            self.action_space,
-            self.device,
-            optimize_memory_usage=self.optimize_memory_usage,
-        )
-        
+                self.buffer_size,
+                self.observation_space,
+                self.action_space,
+                self.device,
+                optimize_memory_usage=self.optimize_memory_usage,
+            )
+
         for i in range(self.n_traintasks):
             self.RBList_encoder[i] = ReplayBuffer(
-            self.buffer_size,
-            self.observation_space,
-            self.action_space,
-            self.device,
-            optimize_memory_usage=self.optimize_memory_usage,
-        )
-        
+                self.buffer_size,
+                self.observation_space,
+                self.action_space,
+                self.device,
+                optimize_memory_usage=self.optimize_memory_usage,
+            )
+
         for i in range(self.n_evaltasks):
             self.RBList_eval[i] = ReplayBuffer(
-            self.buffer_size,
-            self.observation_space,
-            self.action_space,
-            self.device,
-            optimize_memory_usage=self.optimize_memory_usage,
-        )
+                self.buffer_size,
+                self.observation_space,
+                self.action_space,
+                self.device,
+                optimize_memory_usage=self.optimize_memory_usage,
+            )
 
     def learn(
         self,
@@ -416,12 +418,12 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         meta-training loop
         '''
 
-        
+
 
         for it_ in range(1):
             if it_ == 0 and self.initial_experience == False:
-                self.actor.z_means = th.zeros(5)
-                self.actor.z_vars = th.ones(5)
+                self.actor.z_means = th.zeros(self.latent_dim)
+                self.actor.z_vars = th.ones(self.latent_dim)
                 self.actor.sample_z()
                 self.actor.context = None
 
@@ -459,13 +461,13 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
                 self._n_train_steps_total += 1
 
                 print('----- ', train_step ,' -----')
-                
+
             self._dump_logs()
             self.ent_coef_losses, self.ent_coefs = [], []
             self.actor_losses, self.critic_losses = [], []
             self.kl_losses = []
             self.l_z_means, self.l_z_vars = [], []
-        
+
         callback.on_training_end()
 
         return self
@@ -487,17 +489,17 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         while num_transitions < num_samples:
             if add_to_enc_buffer:
                 n_samples = self.obtain_samples(max_samples=num_samples - num_transitions,
-                                                                max_trajs=update_posterior_rate,
-                                                                accum_context=False,
-                                                                resample=resample_z_rate,
-                                                                replaybuffers=[self.RBList_replay[self.task_idx],self.RBList_encoder[self.task_idx]])
+                                                max_trajs=update_posterior_rate,
+                                                accum_context=False,
+                                                resample=resample_z_rate,
+                                                replaybuffers=[self.RBList_replay[self.task_idx],self.RBList_encoder[self.task_idx]])
             else:
                 n_samples = self.obtain_samples(max_samples=num_samples - num_transitions,
-                                                                max_trajs=update_posterior_rate,
-                                                                accum_context=False,
-                                                                resample=resample_z_rate,
-                                                                replaybuffers=[self.RBList_replay[self.task_idx]])
-            
+                                                max_trajs=update_posterior_rate,
+                                                accum_context=False,
+                                                resample=resample_z_rate,
+                                                replaybuffers=[self.RBList_replay[self.task_idx]])
+
             if update_posterior_rate != np.inf:
                 context = self.sample_context(self.task_idx)
                 self.actor.infer_posterior(context)
@@ -505,7 +507,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
             num_transitions += n_samples
 
         self._n_env_steps_total += num_transitions
-       
+
 
     def obtain_samples(self, deterministic=False, max_samples=np.inf, max_trajs=np.inf, accum_context=True, resample=1, replaybuffers = []):
         """
@@ -514,22 +516,22 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         The resample argument specifies how often (in trajectories) the agent will resample it's context.
         """
         assert max_samples < np.inf or max_trajs < np.inf, "either max_samples or max_trajs must be finite"
-        
+
         n_steps_total = 0
         n_trajs = 0
         while n_steps_total < max_samples and n_trajs < max_trajs:
             # save the latent context that generated this trajectory
             rollout = self.collect_rollouts(
-                    self.env,
-                    n_episodes=1,
-                    n_steps=self.max_path_length,
-                    action_noise=self.action_noise,
-                    callback=self.callback,
-                    learning_starts=self.learning_starts,
-                    replay_buffer=replaybuffers,
-                    log_interval=None,
-                    accum_context=accum_context
-                )
+                self.env,
+                n_episodes=1,
+                n_steps=self.max_path_length,
+                action_noise=self.action_noise,
+                callback=self.callback,
+                learning_starts=self.learning_starts,
+                replay_buffer=replaybuffers,
+                log_interval=None,
+                accum_context=accum_context
+            )
             n_steps_total += self.max_path_length
             n_trajs += 1
             # don't we also want the option to resample z ever transition?
@@ -706,7 +708,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
 
         assert isinstance(env, VecEnv), "You must pass a VecEnv"
         assert env.num_envs == 1, "OffPolicyAlgorithm only support single environment"
-        
+
         if self.use_sde:
             self.actor.reset_noise()
         try:
@@ -735,7 +737,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
                 #    logger.record(key = "info/current_z_"+str(i), value=z_i)
 #z_dict["z_"+str(i)] = z_i
 
-                
+
                 # Rescale and perform action
                 next_o, reward, done, infos = env.step([a])
                 if accum_context:
@@ -795,7 +797,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
                 #if log_interval is not None and self._episode_num % log_interval == 0:
                 #    self._dump_logs()
                 self._dump_logs()
-                
+
         mean_reward = np.mean(episode_rewards) if total_episodes > 0 else 0.0
         try:
             callback.on_rollout_end()
