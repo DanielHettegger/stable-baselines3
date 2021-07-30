@@ -206,7 +206,7 @@ class PEARL(MetaOffPolicyAlgorithm):
         if not hasattr(indices, '__iter__'):
             indices = [indices]
         
-        final = th.zeros(len(indices),100,self.obs_dim+self.act_dim+1)
+        final = th.zeros(len(indices),100,self.obs_dim*2+self.act_dim+1)
         
         if len(indices) >1:
             
@@ -214,18 +214,18 @@ class PEARL(MetaOffPolicyAlgorithm):
  
                 sample = self.RBList_encoder[idx].sample(batch_size=100) 
 
-                final[i]=th.cat([sample.observations,sample.actions,sample.rewards], dim=1)
+                final[i]=th.cat([sample.observations,sample.actions,sample.rewards, sample.next_observations], dim=1)
         else:
             if buff is not None:
                 sample = buff[indices[0]].sample(batch_size=100) 
 
-                final=th.cat([sample.observations,sample.actions,sample.rewards], dim=1)           
+                final=th.cat([sample.observations,sample.actions,sample.rewards, sample.next_observations], dim=1)           
             
             else:
                 sample = self.RBList_encoder[indices[0]].sample(batch_size=100) 
 
-                final=th.cat([sample.observations,sample.actions,sample.rewards], dim=1)
-            final = final.view(1, 100, self.obs_dim+self.act_dim+1)
+                final=th.cat([sample.observations,sample.actions,sample.rewards, sample.next_observations], dim=1)
+            final = final.view(1, 100, 2*self.obs_dim+self.act_dim+1)
         return final
 
         ##### Training #####

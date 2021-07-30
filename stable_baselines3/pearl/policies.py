@@ -180,8 +180,8 @@ class Actor(BasePolicy):
         
         # create context encoder network
         reward_dim = 1
-        #context_encoder_input_dim = 2*features_dim + action_dim + reward_dim
-        context_encoder_input_dim = features_dim + action_dim + reward_dim
+        context_encoder_input_dim = 2*features_dim + action_dim + reward_dim
+        #context_encoder_input_dim = features_dim + action_dim + reward_dim
         self.context_encoder_output_dim = latent_dim * 2
         context_encoder = create_mlp(input_dim = context_encoder_input_dim, output_dim = self.context_encoder_output_dim, net_arch = hidden_sizes, activation_fn = nn.ReLU)
 
@@ -468,7 +468,7 @@ class Actor(BasePolicy):
         r = th.Tensor(r).reshape(1,1,-1)
         no = th.Tensor(no).reshape(1,1,-1)
         
-        data = th.cat([o, a, r], dim=2)
+        data = th.cat([o, a, r, no], dim=2)
         if self.context is None:
             self.context = data
         else:
