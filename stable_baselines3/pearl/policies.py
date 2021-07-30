@@ -390,9 +390,14 @@ class Actor(BasePolicy):
 
 
         task_z = self.z
-        t, b, s = obs.size()
+        l = obs.size()
+        if len(l) == 3:
+            t,b, s = l
+        else:
+            t,b = l
+            s = 0
         if s == 6:
-            t, b, s = obs.size()
+            t, b, s = l
             obs = obs.view(t * b, -1)
             task_z = [z.repeat(b, 1) for z in task_z]
             task_z = th.cat(task_z, dim=0)
