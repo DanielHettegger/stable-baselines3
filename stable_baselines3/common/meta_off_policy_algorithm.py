@@ -800,6 +800,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
 
         mean_reward = np.mean(episode_rewards) if total_episodes > 0 else 0.0
         try:
+            callback.update_locals(locals())
             callback.on_rollout_end()
         except:
             pass
