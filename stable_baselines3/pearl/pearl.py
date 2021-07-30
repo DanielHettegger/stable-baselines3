@@ -348,7 +348,7 @@ class PEARL(MetaOffPolicyAlgorithm):
             
             target_q = target_q - ent_coef * next_log_prob.reshape(-1, 1)
             
-            q_backup = (rewards * 5) + (1 - dones) * self.gamma * target_q
+            q_backup = rewards + (1 - dones) * self.gamma * target_q
 
         # Q and V networks
         # encoder will only get gradients from Q nets
