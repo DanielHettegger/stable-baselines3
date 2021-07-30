@@ -187,7 +187,7 @@ def evaluate_meta_policy(
         with th.no_grad():
             for r in range(1):
 
-                task_idx = model.n_traintasks + i
+                task_idx = i % model.n_traintasks 
                 env.env_method("reset_task", task_idx)
 
                 model.actor.clear_z()
@@ -196,11 +196,12 @@ def evaluate_meta_policy(
                 num_trajs = 0
 
                 model.JUST_EVAL.reset()
-
-                while num_transitions < 1500 and num_trajs <= 3:
+                n_trans = 3000
+                n_trajs = 3
+                while num_transitions < 1000 * n_trajs and num_trajs <= n_trajs:
                     num = model.obtain_samples(
                         deterministic=True,
-                        max_samples=500 ,#- num_transitions,
+                        max_samples=1000 ,#- num_transitions,
                         max_trajs=1,
                         accum_context=True,
                         replaybuffers=[model.JUST_EVAL],
@@ -210,13 +211,28 @@ def evaluate_meta_policy(
                     if num_trajs >= num_exp_traj_eval:
                         model.actor.infer_posterior(model.actor.context)
 
+                # Collect reward with infered posterior
+                model.JUST_EVAL.reset()
+
+                while num_transitions < 1000 * n_trajs and num_trajs <= n_trajs:
+                    num = model.obtain_samples(
+                        deterministic=True,
+                        max_samples=1000 ,#- num_transitions,
+                        max_trajs=1,
+                        accum_context=True,
+                        replaybuffers=[model.JUST_EVAL],
+                    )
+                    num_transitions += num
+                    num_trajs += 1
+
+
                 rwd = model.JUST_EVAL.rewards[range(model.JUST_EVAL.pos)]
                 episode_rewards.append(np.sum(rwd) / 3)
                 total_episodes += 1
 
     #env.env_method("render", mode="other", epoch=epoch)
     #tg = env.get_attr('target')
-    env.env_method("set_skip", True)
+    #env.env_method("set_skip", True)
 
     std_reward = np.std(episode_rewards) if total_episodes > 0 else 0.0
     mean_reward = np.mean(episode_rewards) if total_episodes > 0 else 0.0
