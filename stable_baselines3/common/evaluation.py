@@ -177,12 +177,10 @@ def evaluate_meta_policy(
     episode_rewards, episode_lengths = [], []
     reward = []
 
-    model.actor.clear_z()  # geht nicht weiter als hier?
+    model.actor.clear_z()
     num_exp_traj_eval = 1
 
     for i in range(n_eval_episodes):
-        if i == (n_eval_episodes-1):
-            env.env_method("set_skip", False)
 
         with th.no_grad():
             for r in range(1):
@@ -196,7 +194,6 @@ def evaluate_meta_policy(
                 num_trajs = 0
 
                 model.JUST_EVAL.reset()
-                n_trans = 3000
                 n_trajs = 3
                 while num_transitions < 1000 * n_trajs and num_trajs <= n_trajs:
                     num = model.obtain_samples(
