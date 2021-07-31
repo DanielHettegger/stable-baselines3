@@ -435,8 +435,8 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
                     self.collect_data(self.num_initial_steps, 1, np.inf)
                 self.initial_experience = True
             # Sample data from train tasks.
-            else:
-                print(self.RBList_replay[1].pos)
+            #else:
+                #print(self.RBList_replay[1].pos)
             for i in range(self.num_tasks_sample):
                 idx = np.random.randint(self.n_traintasks)
                 self.task_idx = idx
