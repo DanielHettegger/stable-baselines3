@@ -211,6 +211,9 @@ def evaluate_meta_policy(
                 # Collect reward with infered posterior
                 model.JUST_EVAL.reset()
 
+                num_transitions = 0
+                num_trajs = 0
+
                 while num_transitions < 1000 * n_trajs and num_trajs <= n_trajs:
                     num = model.obtain_samples(
                         deterministic=True,
