@@ -395,15 +395,16 @@ class Actor(BasePolicy):
             t,b, s = l
         else:
             t,b = l
-            s = 0
-        if s == 6:
+            s = 1
+        if s == 1:
+            task_z = task_z.reshape(1,-1)
+            obs = obs.reshape(1,-1)
+        else:
             t, b, s = l
             obs = obs.view(t * b, -1)
             task_z = [z.repeat(b, 1) for z in task_z]
-            task_z = th.cat(task_z, dim=0)
-        else: 
-            task_z = task_z.reshape(1,-1)
-            obs = obs.reshape(1,-1)
+            task_z = th.cat(task_z, dim=0) 
+            
         
         # run policy, get log probs and new actions
         features = th.cat([obs, task_z.detach()], dim=1).float()
