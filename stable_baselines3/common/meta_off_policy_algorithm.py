@@ -227,7 +227,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
                 optimize_memory_usage=self.optimize_memory_usage,
             )
 
-        base_length = 500
+        base_length = 1000
 
         self.num_initial_steps = 10*base_length
         self.num_train_steps_per_itr = 2000
@@ -237,7 +237,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         self.update_post_train = 1
         self.num_iterations = 500
         self.num_tasks_sample = 5
-        self.max_path_length = 500
+        self.max_path_length = 1000
         self.train_tasks = 5
         self.meta_batch = 16
         self._n_train_steps_total = 0
