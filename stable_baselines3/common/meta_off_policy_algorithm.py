@@ -718,7 +718,7 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
         continue_training = True
         o = env.reset()
         next_o = None
-        while total_steps < n_steps or total_episodes < n_episodes:
+        while total_steps < n_steps and total_episodes < n_episodes:
             done = False
             episode_reward, episode_timesteps = 0.0, 0
 
@@ -796,7 +796,8 @@ class MetaOffPolicyAlgorithm(BaseAlgorithm):
                 # Log training infos
                 #if log_interval is not None and self._episode_num % log_interval == 0:
                 #    self._dump_logs()
-                self._dump_logs()
+                if self.logger is not None:
+                    self._dump_logs()
 
         mean_reward = np.mean(episode_rewards) if total_episodes > 0 else 0.0
         try:
