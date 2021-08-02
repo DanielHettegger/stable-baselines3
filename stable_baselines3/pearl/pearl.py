@@ -408,6 +408,9 @@ class PEARL(MetaOffPolicyAlgorithm):
         #self._dump_logs()
         self.logger.dump(step=self._n_updates)
 
+        if self.callback is not None:
+            self.callback.update_locals(locals())
+            self.callback.on_step()
 
         print('KL_DIV:', kl_div)
         print('KL_LOSS:', kl_loss)
