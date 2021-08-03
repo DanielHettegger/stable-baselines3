@@ -133,7 +133,7 @@ class Actor(BasePolicy):
         features_dim: int,
         latent_dim: int,
         #hidden_sizes: List[int] = [200, 200, 200],
-        hidden_sizes: List[int] = [150],
+        hidden_sizes: List[int] = [150,150],
         activation_fn: Type[nn.Module] = nn.ReLU,
         use_sde: bool = False,
         log_std_init: float = -3,
